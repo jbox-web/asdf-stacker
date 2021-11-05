@@ -23,10 +23,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Install asdf plugin tester
+      - name: Test plugin
         uses: asdf-vm/actions/plugin-test@v1
         with:
           command: stacker --version
