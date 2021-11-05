@@ -9,11 +9,12 @@ on:
     paths-ignore:
       - "**.md"
   schedule:
-    - cron: "0 0 * * *"
+    - cron: '0 6 * * 1'  # Every monday 6 AM
 
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os:
           - ubuntu-20.04
