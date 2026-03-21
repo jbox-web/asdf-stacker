@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 TOOL_NAME="stacker"
 GITHUB_COORDINATES="jbox-web/${TOOL_NAME}"
 
@@ -18,21 +20,43 @@ function install_tool() {
   platform="$(get_platform)"
   architecture="$(get_architecture)"
   filename=$(get_filename "${version}" "${platform}" "${architecture}" "${binary_name}")
+
   download_url=$(get_download_url "${version}" "${platform}" "${architecture}" "${binary_name}")
   download_path="${tmp_download_dir}/${filename}"
 
-  echo "Downloading [${binary_name}] (from ${download_url} to ${download_path})"
-  curl -Lo "${download_path}" "${download_url}"
+  checksum_url=$(get_checksum_url "${version}" "${platform}" "${architecture}" "${binary_name}")
+  checksum_path="${tmp_download_dir}/${filename}.sha256"
 
-  echo "Creating bin directory (${bin_install_path})"
+  log "Downloading binary (from ${download_url} to ${download_path})"
+  download_file "${download_path}" "${download_url}"
+
+  log "Downloading checksum (from ${checksum_url} to ${checksum_path})"
+  download_file "${checksum_path}" "${checksum_url}"
+
+  log "Validating binary"
+  pushd "${tmp_download_dir}" >/dev/null 2>&1 || exit 1
+  sha256sum --check --quiet "${checksum_path}"
+  popd >/dev/null 2>&1 || exit 1
+
+  log "Creating bin directory (${bin_install_path})"
   mkdir -p "${bin_install_path}"
 
-  echo "Cleaning previous binaries (${binary_path})"
-  rm -f "${binary_path}" 2>/dev/null || true
+  log "Cleaning previous binaries (${binary_path})"
+  rm -f "${binary_path}"
 
-  echo "Copying binary"
+  log "Copying binary (from ${download_path} to ${binary_path})"
   cp "${download_path}" "${binary_path}"
   chmod +x "${binary_path}"
+}
+
+function download_file() {
+  local path
+  path="${1}"
+
+  local url
+  url="${2}"
+
+  curl --silent --show-error --location --output "${path}" "${url}"
 }
 
 function get_filename() {
@@ -54,6 +78,18 @@ function get_download_url() {
   filename="$(get_filename "${version}" "${platform}" "${architecture}" "${binary_name}")"
 
   echo "https://github.com/${GITHUB_COORDINATES}/releases/download/v${version}/${filename}"
+}
+
+function get_checksum_url() {
+  local version="${1}"
+  local platform="${2}"
+  local architecture="${3}"
+  local binary_name="${4}"
+
+  local filename
+  filename="$(get_filename "${version}" "${platform}" "${architecture}" "${binary_name}")"
+
+  echo "https://github.com/${GITHUB_COORDINATES}/releases/download/v${version}/${filename}.sha256"
 }
 
 function get_platform() {
@@ -93,15 +129,36 @@ function list_all_versions() {
   releases_path="https://api.github.com/repos/${GITHUB_COORDINATES}/releases"
 
   local cmd
-  cmd="curl -s"
+  cmd="curl"
+
+  local args
+  args=( --silent )
 
   if [ -n "${GITHUB_API_TOKEN:-}" ]; then
-    cmd="${cmd} -H 'Authorization: token ${GITHUB_API_TOKEN}'"
+    args+=( -H "Authorization: token ${GITHUB_API_TOKEN}" )
   fi
 
-  cmd="${cmd} ${releases_path}"
+  args+=( "${releases_path}" )
 
   # Fetch all tag names, and get only second column. Then remove all unnecesary characters.
-  versions=$(eval ${cmd} | grep -oE "tag_name\": *\".{1,15}\"," | sed 's/tag_name\": *\"v//;s/\",//' | sort_versions)
+  versions=$(${cmd} "${args[@]}" | grep -oE "tag_name\": *\".{1,15}\"," | sed 's/tag_name\": *\"v//;s/\",//' | sort_versions)
   echo "${versions}"
 }
+
+function log() {
+  local message="${1}"
+  echo "[$(white "${binary_name}")] $(green "${message}")"
+}
+
+function print_in_color() {
+  local color="$1"
+  shift
+  if [[ "${NO_COLOR:-}" == "" ]]; then
+    printf "$color%b\e[0m\n" "$*"
+  else
+    printf "%b\n" "$*"
+  fi
+}
+
+function green() { print_in_color "\e[32m" "$*"; }
+function white() { print_in_color "\e[37m" "$*"; }

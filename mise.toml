@@ -1,0 +1,6 @@
+[tools]
+shellcheck = "0.11.0"
+
+[tasks.lint-shell]
+description = "Lint shell scripts"
+run = "shellcheck bin/* lib/*"
